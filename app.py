@@ -24,9 +24,9 @@ st.caption(
 with st.sidebar:
     st.header("Параметры анализа")
     symbol = st.text_input("Контракт Bybit linear", "BTCUSDT").strip().upper()
-    interval = st.selectbox("Таймфрейм", ["1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "12h", "1d", "1w"], index=5)
+    interval = st.selectbox("Таймфрейм свечи", ["1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "12h", "1d", "1w"], index=5)
     history_size = st.selectbox("Свечей загрузить", [1000, 2000, 5000, 10000], index=0)
-    window_size = st.selectbox("Длина окна, свечей", [20, 40, 60], index=0)
+    window_size = st.selectbox("Размер окна для сравнения, свечей", [20, 40, 60], index=0)
     neighbor_count = st.slider("Похожих эпизодов", 3, 20, 10)
     horizon = st.slider("Горизонт результата, свечей", 1, 48, 10)
     run = st.button("Загрузить и проанализировать", type="primary", use_container_width=True)
@@ -202,7 +202,14 @@ if st.session_state.get("analysis_requested", False):
         )
 
     except Exception as error:
-        st.error(f"Не удалось выполнить анализ: {error}")
+        if "403 Client Error" in str(error):
+            st.error(
+                "Bybit отклонил запрос с IP сервера Streamlit (403). "
+                "Смена таймфрейма или размера окна это не исправит; приложение нужно разместить на сервере, "
+                "с которого Bybit разрешает доступ к API."
+            )
+        else:
+            st.error(f"Не удалось выполнить анализ: {error}")
 else:
     st.info("Выбери параметры слева и нажми кнопку, чтобы получить свежие данные Bybit.")
 
