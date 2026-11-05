@@ -4,8 +4,8 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from src.data_loader import BinanceFuturesDataLoader, BybitDataLoader
 from src.feature_engineering import build_feature_matrix
+from src.market_database import get_intervals, get_symbols, read_candles
 from src.similarity import find_similar
 
 
@@ -17,15 +17,24 @@ st.set_page_config(
 
 st.title("Похожие рыночные ситуации")
 st.caption(
-    "Исторические свечи загружаются с выбранной биржи. "
+    "Приложение анализирует свечи из базы данных, подготовленной на компьютере. "
     "Исторические результаты не гарантируют будущее движение цены."
 )
 
 with st.sidebar:
     st.header("Параметры анализа")
     source = st.selectbox("Биржа и тип контракта", ["Bybit Perpetual", "Binance Futures"])
-    symbol = st.text_input("USDT-контракт", "BTCUSDT").strip().upper()
-    interval = st.selectbox("Таймфрейм свечи", ["1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "12h", "1d", "1w"], index=5)
+    exchange_key = "bybit" if source == "Bybit Perpetual" else "binance_futures"
+    symbols = get_symbols(exchange_key)
+    if symbols:
+        symbol = st.selectbox("USDT-контракт", symbols)
+        intervals = get_intervals(exchange_key, symbol)
+    else:
+        symbol = None
+        intervals = []
+        st.caption("Для этой биржи пока нет данных в базе.")
+    default_interval = intervals.index("1h") if "1h" in intervals else 0
+    interval = st.selectbox("Таймфрейм свечи", intervals or ["1h"], index=default_interval)
     history_size = st.selectbox("Свечей загрузить", [1000, 2000, 5000, 10000], index=0)
     window_size = st.selectbox("Размер окна для сравнения, свечей", [20, 40, 60], index=0)
     neighbor_count = st.slider("Похожих эпизодов", 3, 20, 10)
@@ -37,17 +46,12 @@ if run:
 
 if st.session_state.get("analysis_requested", False):
     if not symbol:
-        st.error("Укажи инструмент, например BTCUSDT.")
+        st.error("В базе пока нет контрактов для выбранной биржи. Сначала обнови базу на компьютере.")
         st.stop()
 
     try:
-        loader_class = BybitDataLoader if source == "Bybit Perpetual" else BinanceFuturesDataLoader
-        with st.spinner(f"Загружаю свечи {source} и ищу похожие эпизоды…"):
-            candles = loader_class(
-                symbol=symbol,
-                interval=interval,
-                limit=history_size,
-            ).fetch()
+        with st.spinner(f"Читаю базу {source} и ищу похожие эпизоды…"):
+            candles = read_candles(exchange_key, symbol, interval).tail(history_size).reset_index(drop=True)
 
             # Не включаем последнюю свечу, пока она ещё формируется.
             now = datetime.now(timezone.utc)
@@ -212,7 +216,7 @@ if st.session_state.get("analysis_requested", False):
         else:
             st.error(f"Не удалось выполнить анализ: {error}")
 else:
-    st.info("Выбери биржу и параметры слева, затем нажми кнопку анализа.")
+    st.info("Выбери биржу и контракт из загруженной базы, затем нажми кнопку анализа.")
 
 st.divider()
 st.markdown(

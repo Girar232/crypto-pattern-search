@@ -1,7 +1,6 @@
 numpy
 pandas
 scikit-learn
-matplotlib
 requests
 streamlit
 plotly

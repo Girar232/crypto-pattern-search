@@ -17,7 +17,7 @@ class BybitDataLoader:
         self.interval = interval
         self.limit = limit
 
-    def fetch(self) -> pd.DataFrame:
+    def fetch(self, start_time_ms: int | None = None) -> pd.DataFrame:
         if self.interval not in self.INTERVALS:
             raise ValueError(f"Неподдерживаемый таймфрейм Bybit: {self.interval}")
         if self.limit < 1:
@@ -33,7 +33,9 @@ class BybitDataLoader:
                 "interval": self.INTERVALS[self.interval],
                 "limit": page_size,
             }
-            if end_time is not None:
+            if start_time_ms is not None:
+                params["start"] = start_time_ms
+            elif end_time is not None:
                 params["end"] = end_time
 
             response = requests.get(self.BASE_URL, params=params, timeout=15)
@@ -46,6 +48,8 @@ class BybitDataLoader:
             if not page:
                 break
             rows.extend(page)
+            if start_time_ms is not None:
+                break
             oldest_time = min(int(row[0]) for row in page)
             end_time = oldest_time - 1
             if len(page) < page_size:
