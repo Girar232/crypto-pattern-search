@@ -41,12 +41,17 @@ def calculate_features(
     rallies = close_prices / running_min - 1
     max_rally = rallies.max()
 
-    # 5. Средний объём относительно предыдущих 100 свечей
-    avg_volume_ratio = volumes.mean() / previous_volume
+    # 5. Относительный объём. При нулевом базовом объёме используем нейтральное значение.
+    avg_volume_ratio = (
+        volumes.mean() / previous_volume if previous_volume > 0 else 1.0
+    )
 
-    # 6. Изменение объёма: последние 5 часов против первых 5
+    # 6. Направление изменения объёма, ограниченное диапазоном [-1, 1].
+    first_volume = volumes[:5].mean()
+    last_volume = volumes[-5:].mean()
+    volume_total = first_volume + last_volume
     volume_trend = (
-        volumes[-5:].mean() / volumes[:5].mean() - 1
+        (last_volume - first_volume) / volume_total if volume_total > 0 else 0.0
     )
 
     # Средний диапазон свечи относительно цены открытия
@@ -114,8 +119,8 @@ def build_feature_matrix(
     if len(df) < volume_lookback + window_size:
         raise ValueError("Недостаточно исторических данных.")
 
-    if (df["volume"] <= 0).any():
-        raise ValueError("Обнаружен нулевой или отрицательный объём.")
+    if (df["volume"] < 0).any():
+        raise ValueError("Обнаружен отрицательный объём.")
 
     if (df["open"] <= 0).any():
         raise ValueError("Обнаружена некорректная цена открытия.")
@@ -138,8 +143,10 @@ def build_feature_matrix(
             previous_volume
         )
         if "taker_buy_volume" in window.columns and window["taker_buy_volume"].notna().all():
+            total_volume = window["volume"].sum()
             features["buy_pressure"] = (
-                window["taker_buy_volume"].sum() / window["volume"].sum()
+                window["taker_buy_volume"].sum() / total_volume
+                if total_volume > 0 else 0.5
             )
 
         features["start_time"] = window["open_time"].iloc[0]
