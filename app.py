@@ -164,7 +164,12 @@ if st.session_state.get("analysis_requested", False):
 
         for number, (_, row) in enumerate(results.iterrows(), start=1):
             start_idx = time_to_index[pd.Timestamp(row["start_time"])]
-            add_candles(overview, f"Аналог {number} · доходность {row['future_return']:.2%} · дистанция {row['distance']:.3f}", start_idx, "#4c78a8")
+            add_candles(
+                overview,
+                f"A{number} · {row['future_return']:.1%} · d{row['distance']:.2f}",
+                start_idx,
+                "#4c78a8",
+            )
         add_candles(overview, "Текущая ситуация", target_idx, "#222222")
         overview.update_xaxes(rangeslider_visible=False)
         overview.add_vline(x=window_size - 0.5, line_dash="dash", line_color="royalblue")
@@ -172,10 +177,24 @@ if st.session_state.get("analysis_requested", False):
         overview.update_layout(
             xaxis_title="Свечи от начала окна",
             yaxis_title="Цена (начало каждого окна = 100)",
-            legend_title="Исторический результат",
-            height=520,
+            legend={
+                "title": {"text": "Аналог · доходность · дистанция"},
+                "orientation": "h",
+                "x": 0,
+                "xanchor": "left",
+                "y": -0.25,
+                "yanchor": "top",
+                "font": {"size": 10},
+                "itemwidth": 90,
+            },
+            margin={"l": 48, "r": 10, "t": 20, "b": 110},
+            height=560,
         )
-        st.plotly_chart(overview, use_container_width=True)
+        st.plotly_chart(
+            overview,
+            use_container_width=True,
+            config={"responsive": True, "displayModeBar": False},
+        )
         st.caption(f"Вертикальная линия отделяет исходное окно из {window_size} свечей от последующих {horizon} свечей. Будущее движение текущей ситуации неизвестно.")
         st.subheader("Исторические аналоги и их последующий результат")
         display = results[["start_time", "end_time", "distance", "future_return"]].copy()
