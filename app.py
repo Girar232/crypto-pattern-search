@@ -10,15 +10,15 @@ from src.similarity import find_similar
 
 
 st.set_page_config(
-    page_title="Поиск похожих ситуаций",
+    page_title="Crypto Pattern Search",
     page_icon="📈",
     layout="wide",
 )
 
-st.title("Похожие рыночные ситуации")
+st.title("Crypto Pattern Search")
 st.caption(
-    "Приложение анализирует свечи из базы данных, подготовленной на компьютере. "
-    "Исторические результаты не гарантируют будущее движение цены."
+    "Поиск криптовалютных паттернов по историческим свечам. "
+    "Анализ показывает прошлые аналоги, а не прогноз цены."
 )
 
 with st.sidebar:
@@ -36,21 +36,21 @@ with st.sidebar:
     default_interval = intervals.index("1h") if "1h" in intervals else 0
     interval = st.selectbox("Таймфрейм свечи", intervals or ["1h"], index=default_interval)
     history_size = st.selectbox("Свечей загрузить", [1000, 2000, 5000, 10000], index=0)
-    window_size = st.selectbox("Размер окна для сравнения, свечей", [20, 40, 60], index=0)
-    neighbor_count = st.slider("Похожих эпизодов", 3, 20, 10)
+    window_size = st.selectbox("Длина текущего окна, свечей", [20, 40, 60], index=0)
+    neighbor_count = st.slider("Количество аналогов", 3, 20, 10)
     horizon = st.slider("Горизонт результата, свечей", 1, 48, 10)
-    run = st.button("Загрузить и проанализировать", type="primary", use_container_width=True)
+    run = st.button("Найти аналоги", type="primary", use_container_width=True)
 
 if run:
     st.session_state["analysis_requested"] = True
 
 if st.session_state.get("analysis_requested", False):
     if not symbol:
-        st.error("В базе пока нет контрактов для выбранной биржи. Сначала обнови базу на компьютере.")
+        st.error("В базе пока нет контрактов для выбранной биржи.")
         st.stop()
 
     try:
-        with st.spinner(f"Читаю базу {source} и ищу похожие эпизоды…"):
+        with st.spinner(f"Читаю данные {source} и ищу исторические аналоги…"):
             candles = read_candles(exchange_key, symbol, interval).tail(history_size).reset_index(drop=True)
 
             # Не включаем последнюю свечу, пока она ещё формируется.
@@ -73,22 +73,22 @@ if st.session_state.get("analysis_requested", False):
         avg_distance = results["distance"].mean()
         baseline = (candles["close"].shift(-horizon) / candles["close"] - 1).dropna()
 
-        st.subheader("Найденные эпизоды")
+        st.subheader("Сводка по аналогам")
         count_column, distance_column = st.columns(2)
-        count_column.metric("Количество эпизодов", len(results))
+        count_column.metric("Найдено аналогов", len(results))
         distance_column.metric(
             "Средняя дистанция (меньше = ближе)",
             f"{avg_distance:.3f}",
             help=(
                 "Это среднее расстояние между признаками текущего окна и найденных аналогов. "
-                "Меньшее значение означает более похожие ситуации. Дистанция не является процентом или вероятностью."
+                "Меньшее значение означает более похожие окна. Дистанция не является процентом или вероятностью."
             ),
         )
 
         st.subheader("Сравнение результатов")
         comparison = pd.DataFrame([
             {
-                "Выборка": "Похожие ситуации",
+                "Выборка": "Найденные аналоги",
                 "Средняя доходность": f"{avg_return:.2%}",
                 "Медианная доходность": f"{median_return:.2%}",
                 "Периодов с ростом": f"{positive_share:.0%}",
@@ -106,7 +106,7 @@ if st.session_state.get("analysis_requested", False):
             hide_index=True,
             column_config={
                 "Выборка": st.column_config.TextColumn(
-                    help="Какие периоды собраны в этой строке: выбранные похожие окна или все доступные периоды для базы."
+                    help="Строка аналогов содержит только отобранные похожие окна; база включает все доступные периоды без отбора по сходству."
                 ),
                 "Средняя доходность": st.column_config.TextColumn(
                     help="Среднее изменение цены за выбранный горизонт."
@@ -120,33 +120,18 @@ if st.session_state.get("analysis_requested", False):
             },
         )
 
-        st.subheader(f"{source} · {symbol} · {interval}: все похожие эпизоды")
+        st.subheader(f"Свечной график · {source} · {symbol} · {interval}")
         current = features.iloc[-1]
         current_start = pd.Timestamp(current["start_time"])
         time_to_index = {timestamp: i for i, timestamp in enumerate(candles["open_time"])}
         target_idx = time_to_index[current_start]
-        current_candles = candles.iloc[target_idx:target_idx + window_size]
-        current_prices = current_candles["close"].to_numpy()
-
-        def normalized_path(start_time):
-            start_idx = time_to_index[pd.Timestamp(start_time)]
-            end_idx = start_idx + window_size + horizon
-            prices = candles.iloc[start_idx:end_idx]["close"].to_numpy()
-            return prices / prices[0] * 100
-
-        def add_path(chart, name, values, color=None, width=2):
-            chart.add_trace(go.Scatter(
-                x=list(range(len(values))), y=values, mode="lines", name=name,
-                line={"color": color, "width": width} if color else {"width": width},
-            ))
-
         overview = go.Figure()
 
         def add_candles(chart, name, start_idx, color):
-            candle_count = window_size if name == "Текущая ситуация" else window_size + horizon
+            candle_count = window_size if name == "Текущее окно" else window_size + horizon
             part = candles.iloc[start_idx:start_idx + candle_count]
             base = part.iloc[0]["open"]
-            is_current = name == "Текущая ситуация"
+            is_current = name == "Текущее окно"
             chart.add_trace(go.Candlestick(
                 x=list(range(candle_count)),
                 open=part["open"] / base * 100,
@@ -163,8 +148,8 @@ if st.session_state.get("analysis_requested", False):
                 hovertemplate=(
                     "Открытие свечи: %{customdata}<br>"
                     "Свеча от начала окна: %{x}<br>"
-                    "Open: %{open:.2f}<br>High: %{high:.2f}<br>"
-                    "Low: %{low:.2f}<br>Close: %{close:.2f}"
+                    "Открытие: %{open:.2f}<br>Максимум: %{high:.2f}<br>"
+                    "Минимум: %{low:.2f}<br>Закрытие: %{close:.2f}"
                     "<extra>%{fullData.name}</extra>"
                 ),
             ))
@@ -177,7 +162,7 @@ if st.session_state.get("analysis_requested", False):
                 start_idx,
                 "#4c78a8",
             )
-        add_candles(overview, "Текущая ситуация", target_idx, "#222222")
+        add_candles(overview, "Текущее окно", target_idx, "#222222")
         overview.update_xaxes(rangeslider_visible=False)
         overview.add_vline(x=window_size - 0.5, line_dash="dash", line_color="royalblue")
         overview.add_hline(y=100, line_dash="dot", line_color="gray")
@@ -185,7 +170,7 @@ if st.session_state.get("analysis_requested", False):
             xaxis_title="Свечи от начала окна",
             yaxis_title="Цена (начало каждого окна = 100)",
             legend={
-                "title": {"text": "Аналог · доходность · дистанция"},
+                "title": {"text": "A · доходность · дистанция"},
                 "orientation": "h",
                 "x": 0,
                 "xanchor": "left",
@@ -202,8 +187,8 @@ if st.session_state.get("analysis_requested", False):
             use_container_width=True,
             config={"responsive": True, "displayModeBar": False},
         )
-        st.caption(f"Вертикальная линия отделяет исходное окно из {window_size} свечей от последующих {horizon} свечей. Будущее движение текущей ситуации неизвестно.")
-        st.subheader("Исторические аналоги и их последующий результат")
+        st.caption(f"Вертикальная линия отделяет текущее окно из {window_size} свечей от последующих {horizon} свечей у исторических аналогов.")
+        st.subheader("Таблица аналогов")
         display = results[["start_time", "end_time", "distance", "future_return"]].copy()
         display.insert(0, "Аналог", [f"A{i}" for i in range(1, len(display) + 1)])
         display["start_time"] = pd.to_datetime(display["start_time"]).dt.strftime("%Y-%m-%d %H:%M UTC")
@@ -252,4 +237,41 @@ st.divider()
 st.markdown(
     '**Об авторе:** Валерий Назаров · '
     '[Telegram: @kodjurka](https://t.me/kodjurka)'
+)
+
+st.markdown(
+    """
+### О Crypto Pattern Search
+
+**Crypto Pattern Search** — инструмент для исследования повторяющихся движений крипторынка. Он сравнивает текущее окно свечей с историей и показывает наиболее близкие аналоги.
+
+#### Данные
+
+Сейчас в базе — USDT-бессрочные контракты Bybit с таймфреймами `15m`, `1h` и `4h`. База обновляется отдельно на компьютере автора; приложение анализирует сохранённые данные и во время расчёта не запрашивает биржу. Binance Futures появится в списке, когда для неё будут добавлены данные.
+
+#### Как пользоваться
+
+1. Выбери биржу, контракт и таймфрейм.
+2. Задай объём истории, длину текущего окна, количество аналогов и горизонт результата.
+3. Нажми **«Найти аналоги»**. На графике текущее окно показывается сразу; исторические аналоги можно включить через легенду. Метки A1, A2 и далее совпадают с ID в таблице.
+
+#### Что означают показатели
+
+- **Найдено аналогов** — число исторических окон, выбранных алгоритмом.
+- **Средняя доходность** — среднее изменение цены после найденных аналогов за выбранный горизонт.
+- **Медианная доходность** — результат в середине списка; он меньше зависит от одного необычно сильного движения.
+- **Периодов с ростом** — доля аналогов или базовых периодов, завершившихся выше начальной цены.
+- **Средняя дистанция** — среднее расстояние по стандартизированным признакам от текущего окна до найденных аналогов. Чем меньше, тем ближе аналог; дистанция не является процентом или вероятностью.
+- **База** — результаты всех последовательных периодов выбранного горизонта без отбора по сходству. Периоды базы могут пересекаться.
+
+В таблице **«Начало окна»** и **«Конец окна»** показывают границы аналога, **«Дистанция»** — его отличие от текущего окна, а **«Доходность после окна»** — изменение цены после аналога на заданном горизонте.
+
+#### Как искать аналоги
+
+Приложение описывает окна числовыми признаками: доходностью, волатильностью, просадкой, ростом, объёмом, диапазоном свечей и доходностью четырёх частей окна. Признаки масштабируются, затем сравниваются евклидовым расстоянием. Пересекающиеся исторические аналоги отбрасываются с учётом длины окна и горизонта результата. На графике `A1`, `A2` и далее — ID аналогов из таблицы; исторические свечи изначально скрыты в легенде. Цены нормированы к 100 в начале каждого окна.
+
+#### Можно ли на этом заработать?
+
+Инструмент не выдаёт торговых сигналов и сам по себе не доказывает наличие прибыльной стратегии. Он помогает находить исторические аналоги и формулировать гипотезы для проверки. Возможность заработать по этим данным неизвестна: стратегию нужно отдельно проверить на множестве прошлых точек без утечки будущих данных, с учётом комиссий, проскальзывания и funding. Не принимай решение о сделке только по показателям приложения.
+"""
 )
