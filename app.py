@@ -73,6 +73,11 @@ if st.session_state.get("analysis_requested", False):
         avg_distance = results["distance"].mean()
         baseline = (candles["close"].shift(-horizon) / candles["close"] - 1).dropna()
 
+        st.subheader("Найденные эпизоды")
+        count_column, distance_column = st.columns(2)
+        count_column.metric("Количество эпизодов", len(results))
+        distance_column.metric("Средняя дистанция", f"{avg_distance:.3f}")
+
         st.subheader("Сравнение результатов")
         comparison = pd.DataFrame([
             {
@@ -80,14 +85,12 @@ if st.session_state.get("analysis_requested", False):
                 "Средняя доходность": f"{avg_return:.2%}",
                 "Медианная доходность": f"{median_return:.2%}",
                 "Периодов с ростом": f"{positive_share:.0%}",
-                "Средняя дистанция": f"{avg_distance:.3f}",
             },
             {
                 "Выборка": "Все периоды (база)",
                 "Средняя доходность": f"{baseline.mean():.2%}",
                 "Медианная доходность": f"{baseline.median():.2%}",
                 "Периодов с ростом": f"{(baseline > 0).mean():.0%}",
-                "Средняя дистанция": "—",
             },
         ])
         st.dataframe(
@@ -106,9 +109,6 @@ if st.session_state.get("analysis_requested", False):
                 ),
                 "Периодов с ростом": st.column_config.TextColumn(
                     help="Доля периодов, в которых цена выросла за выбранный горизонт."
-                ),
-                "Средняя дистанция": st.column_config.TextColumn(
-                    help="Среднее расстояние по признакам от текущего окна до выбранных аналогов. Меньше — ближе; это не вероятность. Для базы не рассчитывается."
                 ),
             },
         )
@@ -152,7 +152,7 @@ if st.session_state.get("analysis_requested", False):
                 decreasing_line_color="#111111" if is_current else "#dc2626",
                 increasing_fillcolor="#ffffff" if is_current else "#16a34a",
                 decreasing_fillcolor="#111111" if is_current else "#dc2626",
-                visible="legendonly" if name.startswith("Аналог") else True,
+                visible=True if is_current else "legendonly",
                 hovertemplate=(
                     "Открытие свечи: %{customdata}<br>"
                     "Свеча от начала окна: %{x}<br>"
