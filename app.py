@@ -76,7 +76,14 @@ if st.session_state.get("analysis_requested", False):
         st.subheader("Найденные эпизоды")
         count_column, distance_column = st.columns(2)
         count_column.metric("Количество эпизодов", len(results))
-        distance_column.metric("Средняя дистанция", f"{avg_distance:.3f}")
+        distance_column.metric(
+            "Средняя дистанция (меньше = ближе)",
+            f"{avg_distance:.3f}",
+            help=(
+                "Это среднее расстояние между признаками текущего окна и найденных аналогов. "
+                "Меньшее значение означает более похожие ситуации. Дистанция не является процентом или вероятностью."
+            ),
+        )
 
         st.subheader("Сравнение результатов")
         comparison = pd.DataFrame([
@@ -198,6 +205,7 @@ if st.session_state.get("analysis_requested", False):
         st.caption(f"Вертикальная линия отделяет исходное окно из {window_size} свечей от последующих {horizon} свечей. Будущее движение текущей ситуации неизвестно.")
         st.subheader("Исторические аналоги и их последующий результат")
         display = results[["start_time", "end_time", "distance", "future_return"]].copy()
+        display.insert(0, "Аналог", [f"A{i}" for i in range(1, len(display) + 1)])
         display["start_time"] = pd.to_datetime(display["start_time"]).dt.strftime("%Y-%m-%d %H:%M UTC")
         display["end_time"] = pd.to_datetime(display["end_time"]).dt.strftime("%Y-%m-%d %H:%M UTC")
         display["future_return"] = display["future_return"].map(lambda value: f"{value:.2%}")
@@ -207,6 +215,9 @@ if st.session_state.get("analysis_requested", False):
             use_container_width=True,
             hide_index=True,
             column_config={
+                "Аналог": st.column_config.TextColumn(
+                    help="ID исторического аналога; совпадает с индексом в легенде графика."
+                ),
                 "start_time": st.column_config.TextColumn(
                     "Начало окна",
                     help="Время открытия первой свечи исторического аналога."
