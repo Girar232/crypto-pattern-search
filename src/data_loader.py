@@ -81,3 +81,60 @@ class BybitDataLoader:
         if value == "M":
             return 31 * 24 * 60 * 60 * 1000
         return int(value) * 60 * 1000
+
+
+class BinanceFuturesDataLoader:
+    """Публичные свечи бессрочных USDⓈ-M контрактов Binance."""
+
+    BASE_URL = "https://fapi.binance.com/fapi/v1/klines"
+
+    def __init__(self, symbol: str, interval: str, limit: int = 1000):
+        self.symbol = symbol.upper()
+        self.interval = interval
+        self.limit = limit
+
+    def fetch(self) -> pd.DataFrame:
+        supported = set(BybitDataLoader.INTERVALS)
+        if self.interval not in supported:
+            raise ValueError(f"Неподдерживаемый таймфрейм Binance Futures: {self.interval}")
+        if self.limit < 1:
+            raise ValueError("Количество свечей должно быть положительным.")
+
+        rows = []
+        end_time = None
+        while len(rows) < self.limit:
+            page_size = min(1000, self.limit - len(rows))
+            params = {
+                "symbol": self.symbol,
+                "interval": self.interval,
+                "limit": page_size,
+            }
+            if end_time is not None:
+                params["endTime"] = end_time
+
+            response = requests.get(self.BASE_URL, params=params, timeout=15)
+            response.raise_for_status()
+            page = response.json()
+            if not page:
+                break
+            rows.extend(page)
+            end_time = min(int(row[0]) for row in page) - 1
+            if len(page) < page_size:
+                break
+
+        if not rows:
+            raise ValueError(f"Binance Futures не вернул свечи для {self.symbol} ({self.interval}).")
+
+        columns = [
+            "open_time", "open", "high", "low", "close", "volume", "close_time",
+            "quote_volume", "trades", "taker_buy_volume", "taker_buy_quote_volume", "ignore",
+        ]
+        df = pd.DataFrame(rows, columns=columns)
+        df = df.drop_duplicates(subset="open_time").sort_values("open_time").tail(self.limit)
+        df["open_time"] = pd.to_datetime(df["open_time"], unit="ms", utc=True)
+        numeric = [
+            "open", "high", "low", "close", "volume", "quote_volume",
+            "taker_buy_volume", "taker_buy_quote_volume",
+        ]
+        df[numeric] = df[numeric].astype(float)
+        return df.reset_index(drop=True)

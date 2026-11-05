@@ -4,7 +4,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from src.data_loader import BybitDataLoader
+from src.data_loader import BinanceFuturesDataLoader, BybitDataLoader
 from src.feature_engineering import build_feature_matrix
 from src.similarity import find_similar
 
@@ -17,13 +17,14 @@ st.set_page_config(
 
 st.title("Похожие рыночные ситуации")
 st.caption(
-    "Источник данных: Bybit USDT-бессрочные контракты (linear). "
+    "Исторические свечи загружаются с выбранной биржи. "
     "Исторические результаты не гарантируют будущее движение цены."
 )
 
 with st.sidebar:
     st.header("Параметры анализа")
-    symbol = st.text_input("Контракт Bybit linear", "BTCUSDT").strip().upper()
+    source = st.selectbox("Биржа и тип контракта", ["Bybit Perpetual", "Binance Futures"])
+    symbol = st.text_input("USDT-контракт", "BTCUSDT").strip().upper()
     interval = st.selectbox("Таймфрейм свечи", ["1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "12h", "1d", "1w"], index=5)
     history_size = st.selectbox("Свечей загрузить", [1000, 2000, 5000, 10000], index=0)
     window_size = st.selectbox("Размер окна для сравнения, свечей", [20, 40, 60], index=0)
@@ -40,8 +41,9 @@ if st.session_state.get("analysis_requested", False):
         st.stop()
 
     try:
-        with st.spinner("Загружаю свечи Bybit и ищу похожие эпизоды…"):
-            candles = BybitDataLoader(
+        loader_class = BybitDataLoader if source == "Bybit Perpetual" else BinanceFuturesDataLoader
+        with st.spinner(f"Загружаю свечи {source} и ищу похожие эпизоды…"):
+            candles = loader_class(
                 symbol=symbol,
                 interval=interval,
                 limit=history_size,
@@ -107,7 +109,7 @@ if st.session_state.get("analysis_requested", False):
             },
         )
 
-        st.subheader(f"{symbol} · {interval}: все похожие эпизоды")
+        st.subheader(f"{source} · {symbol} · {interval}: все похожие эпизоды")
         current = features.iloc[-1]
         current_start = pd.Timestamp(current["start_time"])
         time_to_index = {timestamp: i for i, timestamp in enumerate(candles["open_time"])}
@@ -204,14 +206,13 @@ if st.session_state.get("analysis_requested", False):
     except Exception as error:
         if "403 Client Error" in str(error):
             st.error(
-                "Bybit отклонил запрос с IP сервера Streamlit (403). "
-                "Смена таймфрейма или размера окна это не исправит; приложение нужно разместить на сервере, "
-                "с которого Bybit разрешает доступ к API."
+                f"{source} отклонил запрос с IP сервера приложения (403). "
+                "Это ограничение доступа по сети или IP, а не ошибка параметров анализа."
             )
         else:
             st.error(f"Не удалось выполнить анализ: {error}")
 else:
-    st.info("Выбери параметры слева и нажми кнопку, чтобы получить свежие данные Bybit.")
+    st.info("Выбери биржу и параметры слева, затем нажми кнопку анализа.")
 
 st.divider()
 st.markdown(
