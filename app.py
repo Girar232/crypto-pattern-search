@@ -205,3 +205,9 @@ if st.session_state.get("analysis_requested", False):
         st.error(f"Не удалось выполнить анализ: {error}")
 else:
     st.info("Выбери параметры слева и нажми кнопку, чтобы получить свежие данные Bybit.")
+
+st.divider()
+st.markdown(
+    '**Об авторе:** Валерий Назаров · '
+    '[Telegram: @kodjurka](https://t.me/kodjurka)'
+)
